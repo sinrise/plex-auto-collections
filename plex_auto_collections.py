@@ -41,13 +41,13 @@ def paths_match(plex_location: str, target_folder: Path) -> bool:
 
 def get_or_create_collection(library, name: str, items=None):
     """
-    Get existing collection or create a new one.
-    Uses two-step creation for better reliability.
+    Get existing collection or create one with items.
+    Uses items= parameter during creation (most reliable method).
     """
     if items is None:
         items = []
 
-    # Check if collection already exists
+    # Check if it already exists
     try:
         for col in library.collections():
             if col.title == name:
@@ -56,21 +56,21 @@ def get_or_create_collection(library, name: str, items=None):
         pass
 
     if not items:
-        logging.warning(f"No items to create collection '{name}'")
+        logging.warning(f"No items available to create collection '{name}'")
         return None
 
     try:
         logging.info(f"Creating new collection: {name}")
-        # Create collection first (empty)
-        collection = library.createCollection(title=name, smart=False)
-        # Then add items
-        if items:
-            collection.addItems(items)
+        # Create collection + add items in one call
+        collection = library.createCollection(
+            title=name,
+            items=items,
+            smart=False
+        )
         return collection
     except Exception as e:
         logging.error(f"Failed to create collection '{name}': {e}")
         return None
-
 
 def process_folder(library, folder_path: Path, dry_run: bool = False):
     collection_name = folder_path.name

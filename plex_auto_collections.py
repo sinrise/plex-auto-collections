@@ -2,33 +2,25 @@
 """
 Plex Auto Collections
 
-Create Plex collections automatically based on folder structure.
-Designed to be simple today and extensible in the future.
+Automatically creates Plex collections based on folder names.
+Safe, non-destructive behavior:
+- Only creates collections matching folder names under --base-path
+- Only adds items to those specific collections
+- Never removes items from any collection
+- Never deletes or modifies existing collections
 
-Repository: https://github.com/YOUR_USERNAME/plex-auto-collections
+Items can belong to multiple collections without issue.
 """
 
 import argparse
 import logging
 import sys
 from pathlib import Path
-from importlib.metadata import version, PackageNotFoundError
 
 from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound, Unauthorized
 
-__version__ = "0.1.0"
-
-DEFAULT_PLEX_URL = "http://localhost:32400"
-DEFAULT_LIBRARY = "Personal Videos"
-DEFAULT_BASE_PATH = Path.home() / "Videos" / "Personal"
-
-
-def get_version() -> str:
-    try:
-        return version("plex-auto-collections")
-    except PackageNotFoundError:
-        return __version__
+__version__ = "0.2.0"
 
 
 def setup_logging(verbose: bool = False):
@@ -40,89 +32,148 @@ def setup_logging(verbose: bool = False):
     )
 
 
-def get_plex_server(url: str, token: str) -> PlexServer:
-    try:
-        return PlexServer(url, token)
-    except Unauthorized:
-        logging.error("Invalid Plex token. Please check your token.")
-        sys.exit(1)
-    except Exception as e:
-        logging.error(f"Could not connect to Plex server: {e}")
-        sys.exit(1)
+def paths_match(plex_location: str, target_folder: Path) -> bool:
+    """Robust path comparison for Windows + Plex."""
+    normalized = plex_location.replace('/', '\\').lower()
+    target = str(target_folder).lower()
+    return normalized.startswith(target)
 
 
-def get_or_create_collection(library, name: str):
+def get_or_create_collection(library, name: str, items=None):
+    """
+    Get existing collection or create a new one.
+    Uses two-step creation for better reliability.
+    """
+    if items is None:
+        items = []
+
+    # Check if collection already exists
     try:
-        return library.collection(name)
-    except NotFound:
+        for col in library.collections():
+            if col.title == name:
+                return col
+    except Exception:
+        pass
+
+    if not items:
+        logging.warning(f"No items to create collection '{name}'")
+        return None
+
+    try:
         logging.info(f"Creating new collection: {name}")
-        return library.createCollection(title=name, smart=False)
-
-
-def process_folder(library, folder_path: Path, dry_run: bool = False) -> int:
-    collection_name = folder_path.name
-    collection = get_or_create_collection(library, collection_name)
-
-    added_count = 0
-    try:
-        items = library.all()
+        # Create collection first (empty)
+        collection = library.createCollection(title=name, smart=False)
+        # Then add items
+        if items:
+            collection.addItems(items)
+        return collection
     except Exception as e:
-        logging.error(f"Failed to load library items: {e}")
+        logging.error(f"Failed to create collection '{name}': {e}")
+        return None
+
+
+def process_folder(library, folder_path: Path, dry_run: bool = False):
+    collection_name = folder_path.name
+    logging.info(f"Scanning folder: {collection_name}")
+
+    # Find items belonging to this folder
+    matching_items = []
+    try:
+        all_items = library.all()
+    except Exception as e:
+        logging.error(f"Failed to load library: {e}")
         return 0
 
-    for item in items:
+    for item in all_items:
         for location in item.locations or []:
-            if location.startswith(str(folder_path)):
-                if item not in collection.items():
-                    if not dry_run:
-                        collection.addItems(item)
-                    logging.info(f"  + Added to '{collection_name}': {item.title}")
-                    added_count += 1
+            if paths_match(location, folder_path):
+                matching_items.append(item)
                 break
-    return added_count
+
+    if not matching_items:
+        logging.info(f"  No matching items found")
+        return 0
+
+    # Check if collection already exists and is complete
+    existing = None
+    try:
+        for col in library.collections():
+            if col.title == collection_name:
+                existing = col
+                break
+    except Exception:
+        pass
+
+    if existing:
+        existing_items = set(existing.items())
+        missing = [i for i in matching_items if i not in existing_items]
+
+        if not missing:
+            logging.info(f"  '{collection_name}' is already up to date ({len(matching_items)} items)")
+            return 0
+
+        if dry_run:
+            logging.info(f"  [DRY RUN] Would add {len(missing)} missing item(s) to '{collection_name}'")
+            return len(missing)
+
+        for item in missing:
+            existing.addItems(item)
+            logging.info(f"  + Added: {item.title}")
+        return len(missing)
+
+    # Collection doesn't exist — create it
+    if dry_run:
+        logging.info(f"  [DRY RUN] Would create '{collection_name}' with {len(matching_items)} item(s)")
+        return len(matching_items)
+
+    collection = get_or_create_collection(library, collection_name, items=matching_items)
+    if collection:
+        logging.info(f"  Created '{collection_name}' with {len(matching_items)} item(s)")
+        return len(matching_items)
+
+    return 0
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plex Auto Collections - Create collections from folder names."
+        description="Plex Auto Collections - Create collections from folder names (safe & non-destructive)."
     )
-    parser.add_argument("--version", action="version", version=f"%(prog)s {get_version()}")
-    parser.add_argument("--plex-url", default=DEFAULT_PLEX_URL)
-    parser.add_argument("--token", required=True, help="Your Plex authentication token")
-    parser.add_argument("--library", default=DEFAULT_LIBRARY)
-    parser.add_argument("--base-path", type=Path, default=DEFAULT_BASE_PATH)
-    parser.add_argument("--dry-run", action="store_true", help="Preview without making changes")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument("--plex-url", default="http://localhost:32400")
+    parser.add_argument("--token", required=True, help="Plex authentication token")
+    parser.add_argument("--library", required=True, help="Name of the Plex library")
+    parser.add_argument("--base-path", type=Path, required=True, help="Root folder containing your collection folders")
+    parser.add_argument("--dry-run", action="store_true", help="Preview changes without applying them")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
 
     args = parser.parse_args()
     setup_logging(args.verbose)
 
     logging.info("=== Plex Auto Collections ===")
-    logging.info(f"Library     : {args.library}")
-    logging.info(f"Base Path   : {args.base_path}")
+    logging.info(f"Library   : {args.library}")
+    logging.info(f"Base Path : {args.base_path}")
     if args.dry_run:
-        logging.warning("DRY RUN MODE — No changes will be made")
+        logging.warning("DRY RUN MODE — No changes will be made to Plex")
 
     if not args.base_path.is_dir():
         logging.error(f"Base path does not exist: {args.base_path}")
         sys.exit(1)
 
-    plex = get_plex_server(args.plex_url, args.token)
+    plex = PlexServer(args.plex_url, args.token)
 
     try:
         library = plex.library.section(args.library)
     except NotFound:
-        logging.error(f"Library '{args.library}' was not found.")
+        logging.error(f"Library '{args.library}' not found.")
         sys.exit(1)
 
     total_added = 0
     for folder in sorted(args.base_path.iterdir()):
         if folder.is_dir():
-            logging.info(f"Scanning folder: {folder.name}")
             added = process_folder(library, folder, dry_run=args.dry_run)
             total_added += added
 
-    logging.info(f"Completed. Total items added: {total_added}")
+    logging.info(f"Finished. Total items added/updated: {total_added}")
 
 
 if __name__ == "__main__":

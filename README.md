@@ -2,13 +2,13 @@
 
 Automatically create Plex collections from your folder structure.
 
-Each subfolder becomes a collection with the same name. Videos inside the folder are automatically added to that collection.
+Each subfolder becomes a collection with the same name, and videos inside it are added automatically.
 
-This tool is intentionally designed to be simple today while remaining easy to extend in the future.
+This tool is intentionally designed to be simple today while remaining easy to extend later.
 
 ## Features
 - Folder name → Collection name
-- Idempotent (safe to run multiple times)
+- Safe to run multiple times (idempotent)
 - Dry-run mode
 - Cross-platform (Windows + Linux/Fedora)
 - Easy to schedule
@@ -16,4 +16,4 @@ This tool is intentionally designed to be simple today while remaining easy to e
 ## Installation
 
 ```bash
-pip install plexapi
+pip install -r requirements.txt

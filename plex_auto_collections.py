@@ -21,7 +21,7 @@ __version__ = "0.1.0"
 
 DEFAULT_PLEX_URL = "http://localhost:32400"
 DEFAULT_LIBRARY = "Personal Videos"
-DEFAULT_BASE_PATH = Path.home() / "Videos" / "Personal"   # Cross-platform friendly default
+DEFAULT_BASE_PATH = Path.home() / "Videos" / "Personal"
 
 
 def get_version() -> str:
@@ -87,13 +87,12 @@ def main():
         description="Plex Auto Collections - Create collections from folder names."
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {get_version()}")
-    parser.add_argument("--plex-url", default=DEFAULT_PLEX_URL, help="Plex server URL")
-    parser.add_argument("--token", required=True, help="Plex authentication token")
-    parser.add_argument("--library", default=DEFAULT_LIBRARY, help="Plex library name")
-    parser.add_argument("--base-path", type=Path, default=DEFAULT_BASE_PATH,
-                        help="Root folder containing your collection folders")
-    parser.add_argument("--dry-run", action="store_true", help="Preview changes without applying them")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug output")
+    parser.add_argument("--plex-url", default=DEFAULT_PLEX_URL)
+    parser.add_argument("--token", required=True, help="Your Plex authentication token")
+    parser.add_argument("--library", default=DEFAULT_LIBRARY)
+    parser.add_argument("--base-path", type=Path, default=DEFAULT_BASE_PATH)
+    parser.add_argument("--dry-run", action="store_true", help="Preview without making changes")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
 
     args = parser.parse_args()
     setup_logging(args.verbose)
@@ -102,7 +101,7 @@ def main():
     logging.info(f"Library     : {args.library}")
     logging.info(f"Base Path   : {args.base_path}")
     if args.dry_run:
-        logging.warning("DRY RUN MODE — No changes will be made to Plex")
+        logging.warning("DRY RUN MODE — No changes will be made")
 
     if not args.base_path.is_dir():
         logging.error(f"Base path does not exist: {args.base_path}")
@@ -123,7 +122,7 @@ def main():
             added = process_folder(library, folder, dry_run=args.dry_run)
             total_added += added
 
-    logging.info(f"Completed. Total items added to collections: {total_added}")
+    logging.info(f"Completed. Total items added: {total_added}")
 
 
 if __name__ == "__main__":

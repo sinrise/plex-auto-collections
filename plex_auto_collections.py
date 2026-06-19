@@ -26,6 +26,13 @@ def setup_logging(verbose: bool = False):
     )
 
 
+def load_config(path: Path) -> dict:
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
 def paths_match(plex_location: str, target_folder: Path) -> bool:
     normalized = plex_location.replace('/', '\\').lower()
     target = str(target_folder).lower()
@@ -83,26 +90,41 @@ def process_folder(library, folder_path: Path, dry_run: bool = False, stats=None
         logging.info(f"  [DRY RUN] Would manage {len(matching_items)} item(s)")
         return len(matching_items)
 
-    collection = get_or_create_collection(library, collection_name, items=matching_items)
-    if not collection:
-        return 0
+    # Check if collection already exists
+    existing_collection = None
+    try:
+        for col in library.collections():
+            if col.title == collection_name:
+                existing_collection = col
+                break
+    except Exception:
+        pass
 
-    added = 0
-    for item in matching_items:
-        if item not in collection.items():
-            collection.addItems(item)
-            logging.info(f"  + Added: {item.title}")
-            added += 1
+    if existing_collection:
+        # Update existing collection
+        added = 0
+        for item in matching_items:
+            if item not in existing_collection.items():
+                existing_collection.addItems(item)
+                logging.info(f"  + Added: {item.title}")
+                added += 1
 
-    if added == 0:
-        stats["up_to_date"] += 1
-        logging.info(f"  Already up to date")
+        if added == 0:
+            stats["up_to_date"] += 1
+            logging.info(f"  Already up to date")
+        else:
+            stats["updated"] += 1
+            logging.info(f"  Updated with {added} new item(s)")
+
+        return added
     else:
-        stats["updated"] += 1
-        logging.info(f"  Updated with {added} new item(s)")
-
-    return added
-
+        # Create new collection
+        collection = get_or_create_collection(library, collection_name, items=matching_items)
+        if collection:
+            stats["created"] += 1
+            logging.info(f"  Created collection with {len(matching_items)} item(s)")
+            return len(matching_items)
+        return 0
 
 def main():
     parser = argparse.ArgumentParser(
@@ -165,13 +187,13 @@ def main():
     # Final Summary
     logging.info("=== Summary ===")
     if args.dry_run:
-        logging.info(f"Dry run complete. Would have processed {total_items} items across {len(locations)} location(s).")
+        logging.info(f"Dry run complete. Would have processed items across {len(locations)} location(s).")
     else:
-        logging.info(f"Created:   {stats['created']} new collections")
-        logging.info(f"Updated:   {stats['updated']} existing collections")
-        logging.info(f"Up to date: {stats['up_to_date']} folders (no changes needed)")
-        logging.info(f"No items:   {stats['no_items']} folders had no matching items in Plex")
-        logging.info(f"Total items processed: {total_items}")
+        logging.info(f"Created:     {stats['created']} new collections")
+        logging.info(f"Updated:     {stats['updated']} existing collections")
+        logging.info(f"Up to date:  {stats['up_to_date']} folders (no changes needed)")
+        logging.info(f"No items:    {stats['no_items']} folders had no matching items in Plex")
+        logging.info(f"Total items: {total_items}")
 
     logging.info("Done.")
 

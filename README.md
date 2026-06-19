@@ -1,6 +1,6 @@
 # Plex Auto Collections
 
-A simple tool to automatically create and update Plex collections based on your folder structure.
+Automatically create and manage Plex collections based on your folder structure. Simple, safe, and effective even on large libraries.
 
 Each subfolder becomes a collection with the same name, and videos inside those folders are added to the collection.
 

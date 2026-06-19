@@ -9,6 +9,7 @@ Each subfolder becomes a collection with the same name, and videos inside those 
 - Creates collections named after folders
 - Updates existing collections when new items are added
 - Auto-detects library locations from Plex
+- Clean summary at the end of each run
 - Safe and non-destructive (never removes items from collections)
 - Supports `config.json` for convenience
 - Dry-run mode available

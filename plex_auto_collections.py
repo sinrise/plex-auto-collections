@@ -2,11 +2,8 @@
 """
 Plex Auto Collections
 
-Automatically creates collections based on folder names inside any locations
-configured for a Plex library.
-
-If no base path is provided, it automatically uses all locations configured
-in Plex for the specified library.
+Creates and updates Plex collections based on folder names.
+Safe, simple, and reliable for manual use.
 """
 
 import argparse
@@ -17,7 +14,7 @@ from pathlib import Path
 from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound, Unauthorized
 
-__version__ = "0.3.0"
+__version__ = "1.0.0"
 
 
 def setup_logging(verbose: bool = False):
@@ -47,13 +44,11 @@ def get_or_create_collection(library, name: str, items=None):
         pass
 
     if not items:
-        logging.warning(f"No items to create collection '{name}'")
         return None
 
     try:
-        logging.info(f"Creating new collection: {name}")
-        collection = library.createCollection(title=name, items=items, smart=False)
-        return collection
+        logging.info(f"Creating collection: {name}")
+        return library.createCollection(title=name, items=items, smart=False)
     except Exception as e:
         logging.error(f"Failed to create collection '{name}': {e}")
         return None
@@ -61,7 +56,7 @@ def get_or_create_collection(library, name: str, items=None):
 
 def process_folder(library, folder_path: Path, dry_run: bool = False):
     collection_name = folder_path.name
-    logging.info(f"Scanning folder: {collection_name}")
+    logging.info(f"Processing: {collection_name}")
 
     matching_items = []
     try:
@@ -77,57 +72,42 @@ def process_folder(library, folder_path: Path, dry_run: bool = False):
                 break
 
     if not matching_items:
-        logging.info(f"  No matching items found")
+        logging.info(f"  No items found in Plex for this folder")
         return 0
 
-    existing = None
-    try:
-        for col in library.collections():
-            if col.title == collection_name:
-                existing = col
-                break
-    except Exception:
-        pass
-
-    if existing:
-        existing_items = set(existing.items())
-        missing = [i for i in matching_items if i not in existing_items]
-
-        if not missing:
-            logging.info(f"  '{collection_name}' is already up to date")
-            return 0
-
-        if dry_run:
-            logging.info(f"  [DRY RUN] Would add {len(missing)} item(s)")
-            return len(missing)
-
-        for item in missing:
-            existing.addItems(item)
-            logging.info(f"  + Added: {item.title}")
-        return len(missing)
-
     if dry_run:
-        logging.info(f"  [DRY RUN] Would create '{collection_name}' with {len(matching_items)} items")
+        logging.info(f"  [DRY RUN] Would manage {len(matching_items)} item(s)")
         return len(matching_items)
 
     collection = get_or_create_collection(library, collection_name, items=matching_items)
-    if collection:
-        logging.info(f"  Created '{collection_name}' with {len(matching_items)} items")
-        return len(matching_items)
+    if not collection:
+        return 0
 
-    return 0
+    added = 0
+    for item in matching_items:
+        if item not in collection.items():
+            collection.addItems(item)
+            logging.info(f"  + Added: {item.title}")
+            added += 1
+
+    if added == 0:
+        logging.info(f"  Already up to date ({len(matching_items)} items)")
+    else:
+        logging.info(f"  Updated collection with {added} new item(s)")
+
+    return added
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plex Auto Collections - Auto-detects library locations from Plex when possible."
+        description="Plex Auto Collections - Create collections from folder names"
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--plex-url", default="http://localhost:32400")
-    parser.add_argument("--token", required=True)
-    parser.add_argument("--library", required=True)
-    parser.add_argument("--base-path", type=Path, help="Optional: limit to a specific folder")
-    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--token", required=True, help="Plex authentication token")
+    parser.add_argument("--library", required=True, help="Library name in Plex")
+    parser.add_argument("--base-path", type=Path, help="Optional: specific folder to scan")
+    parser.add_argument("--dry-run", action="store_true", help="Preview changes only")
     parser.add_argument("-v", "--verbose", action="store_true")
 
     args = parser.parse_args()
@@ -144,27 +124,25 @@ def main():
         logging.error(f"Library '{args.library}' not found.")
         sys.exit(1)
 
-    # Determine which locations to scan
+    # Determine locations to scan
     if args.base_path:
         locations = [args.base_path]
-        logging.info(f"Using provided base path: {args.base_path}")
     else:
         locations = [Path(loc) for loc in library.locations]
-        logging.info(f"Auto-detected library locations from Plex: {locations}")
+        logging.info(f"Auto-detected locations from Plex: {locations}")
 
-    total_added = 0
+    total = 0
     for location in locations:
         if not location.is_dir():
-            logging.warning(f"Location does not exist or is not accessible: {location}")
+            logging.warning(f"Skipping missing location: {location}")
             continue
 
-        logging.info(f"Processing location: {location}")
+        logging.info(f"Scanning location: {location}")
         for folder in sorted(location.iterdir()):
             if folder.is_dir():
-                added = process_folder(library, folder, dry_run=args.dry_run)
-                total_added += added
+                total += process_folder(library, folder, dry_run=args.dry_run)
 
-    logging.info(f"Finished. Total items added/updated: {total_added}")
+    logging.info(f"Finished. Total items processed: {total}")
 
 
 if __name__ == "__main__":

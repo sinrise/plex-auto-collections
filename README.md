@@ -1,18 +1,17 @@
 # Plex Auto Collections
 
-Automatically create Plex collections based on your folder structure.
+A simple tool to automatically create and update Plex collections based on your folder structure.
 
-Each subfolder becomes a collection with the same name, and videos inside it are added automatically.
-
-This tool is designed to be **safe and non-destructive** — it only adds items to folder-named collections and never removes items from existing collections.
+Each subfolder inside your library becomes a collection with the same name, and videos inside those folders are added to the collection.
 
 ## Features
 
-- Folder name → Collection name
-- Smart "already up to date" detection
-- Dry-run mode
-- Webhook support for automatic triggering after Plex library activity
-- Cross-platform (Windows + Linux)
+- Creates collections named after folders
+- Updates existing collections with new items
+- Auto-detects library locations from Plex (no need to specify paths manually)
+- Safe and non-destructive (never removes items from collections)
+- Dry-run mode for testing
+- Works on Windows and Linux
 
 ## Installation
 

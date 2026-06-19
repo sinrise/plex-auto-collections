@@ -15,24 +15,64 @@ Each subfolder becomes a collection with the same name, and videos inside those 
 - Dry-run mode available
 - Works on Windows and Linux
 
-### How to Get Your Plex Token
-
-There are a few easy ways to get your Plex token:
-
-1. **Easiest method**:
-   - Go to [https://app.plex.tv](https://app.plex.tv) while logged into your Plex account.
-   - Open Developer Tools (`F12` or right-click → Inspect).
-   - Go to the **Network** tab.
-   - Refresh the page and look for any request that includes `X-Plex-Token` in the request headers.
-
-2. **Alternative method**:
-   - Visit any page in Plex Web (for example your server dashboard).
-   - Add `?X-Plex-Token=1` to the end of the URL and press Enter.
-   - Look at the page source or network requests for your token.
-
-Your token is a long string of letters and numbers. Copy it into your `config.json`.
-
 ## Installation
-
 ```bash
 pip install -r requirements.txt
+```
+
+## Usage
+**Requirements**
+
+You must specify your Plex token in `config.json`
+
+You must specify which library to process using the --library flag:
+
+```Bash
+py plex_auto_collections.py --library "Your Library Name"
+```
+
+# Common Examples
+
+Basic usage:
+```Bash
+py plex_auto_collections.py --library "Personal Videos"
+```
+Dry run (recommended first):
+```Bash
+py plex_auto_collections.py --library "Personal Videos" --dry-run
+```
+Verbose output:
+```Bash
+py plex_auto_collections.py --library "Personal Videos" -v
+```
+Override token from command line:
+```Bash
+py plex_auto_collections.py --library "Personal Videos" --token your-token-here
+```
+
+Summary Output
+After each run, the script shows a clean summary:
+```text
+=== Summary ===
+Created:     87 new collections
+Updated:     12 existing collections
+Up to date:  312 folders (no changes needed)
+No items:    45 folders had no matching items in Plex
+Total items: 1243
+Done.
+```
+# How It Works
+
+If --base-path is not provided, the script automatically reads the folder locations configured for the library in Plex.
+It then scans those locations and creates/updates collections based on subfolder names.
+You can safely run this script multiple times.
+
+# Safety
+This tool is designed to be safe:
+
+It only adds items to collections.
+It never removes items from existing collections.
+Items can belong to multiple collections without issue.
+
+# License
+MIT License
